@@ -3,32 +3,410 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Liquid Glass · 最小示例</title>
+<title>液态玻璃效果展示 · WebGL</title>
 <style>
-  body{margin:0;min-height:100vh;color:#fff;font-family:-apple-system,"PingFang SC","Noto Sans SC",sans-serif;
-       display:flex;flex-direction:column;align-items:center;justify-content:center;gap:28px;padding:48px 20px}
-  h1{margin:0;font-size:clamp(2rem,6vw,3rem);text-align:center}
-  .card{padding:28px 36px;max-width:420px;line-height:1.7}
-  .pill{--lg-radius:999px;padding:14px 34px;font-weight:700;cursor:pointer;border:0;color:inherit;font:inherit}
-  #orb{position:fixed;left:50%;top:22vh;width:180px;height:100px;margin-left:-90px;--lg-radius:46px;
-       display:flex;align-items:center;justify-content:center;font-weight:700;z-index:40}
+:root{color-scheme:dark;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{margin:0;min-height:100vh;color:#fff;background:#07070d;overflow-x:hidden;font-family:-apple-system,"SF Pro Display","Noto Sans SC","PingFang SC",sans-serif}
+#gl{position:fixed;inset:0;width:100%;height:100%;z-index:-1;pointer-events:none}
+/* 玻璃只剩布局 + 外阴影；折射、高光、边框全部由 WebGL 着色器绘制 */
+.g{position:relative;border-radius:var(--r,28px);box-shadow:0 18px 40px rgba(0,0,0,.35)}
+/* WebGL 接管：参与折射的 DOM 文字改由 GL 绘制，DOM 里只保留布局/交互 */
+.gl .gx{-webkit-text-fill-color:transparent;text-shadow:none}
+.gl .ctrl input{opacity:0}
+/* ===== 原版（无 GL）：WebGL 不可用时自动启用 ===== */
+.bg{display:none}
+.legacy #gl{display:none}
+.legacy .bg{display:block;position:fixed;inset:0;z-index:-1;overflow:hidden;background:repeating-linear-gradient(90deg,rgba(255,255,255,.07) 0 2px,transparent 2px 72px),repeating-linear-gradient(0deg,rgba(255,255,255,.07) 0 2px,transparent 2px 72px),#07070d}
+.blob{position:absolute;border-radius:50%;filter:blur(30px);opacity:.9;animation:drift 22s ease-in-out infinite alternate}
+.b1{width:46vmax;height:46vmax;left:-12vmax;top:-10vmax;background:#5e5ce6}
+.b2{width:40vmax;height:40vmax;right:-10vmax;top:10vh;background:#ec4899;animation-delay:-8s}
+.b3{width:36vmax;height:36vmax;left:25vw;bottom:-14vmax;background:#06b6d4;animation-delay:-15s}
+@keyframes drift{to{transform:translate(8vmax,6vmax) scale(1.15)}}
+@media (prefers-reduced-motion:reduce){.blob{animation:none}}
+.legacy .g{isolation:isolate;background:transparent}
+.legacy .g::before{content:"";position:absolute;inset:0;z-index:-2;border-radius:inherit}
+.legacy .g::after{content:"";position:absolute;inset:0;z-index:-1;border-radius:inherit;pointer-events:none;
+ background:radial-gradient(260px circle at var(--mx,30%) var(--my,0%),rgba(255,255,255,.28),transparent 60%),radial-gradient(130% 70% at 50% 0%,rgba(255,255,255,.22),transparent 45%);
+ border:1px solid rgba(255,255,255,.14);border-top-color:rgba(255,255,255,.7);border-bottom-color:rgba(255,255,255,.04);
+ box-shadow:inset 1px 1px 1px rgba(255,255,255,.55),inset -1px -1px 1px rgba(255,255,255,.12),inset 0 10px 18px -8px rgba(255,255,255,.35),inset 0 -8px 16px -8px rgba(255,255,255,.18)}
+body[data-glass=high] .g::before{backdrop-filter:var(--lens,blur(16px)) blur(.5px) saturate(1.6) brightness(1.1);-webkit-backdrop-filter:blur(16px) saturate(1.6)}
+.note{position:fixed;left:0;right:0;bottom:calc(10px + env(safe-area-inset-bottom,0px));text-align:center;font-size:.72rem;color:rgba(255,255,255,.7);padding:0 16px;z-index:60;pointer-events:none;text-shadow:0 1px 6px rgba(0,0,0,.6)}
+
+.wrap{max-width:960px;margin:0 auto;padding:clamp(28px,6vh,64px) 20px 140px;display:flex;flex-direction:column;gap:clamp(26px,4.5vh,46px)}
+.intro{max-width:660px;margin:0 auto}
+h1{margin:0 0 18px;text-align:center;font-size:clamp(2rem,6.2vw,3.2rem);letter-spacing:-.035em;line-height:1.08;font-weight:800}
+.sub{text-align:center;color:rgba(255,255,255,.68);margin:0 auto;max-width:560px;font-size:clamp(.85rem,2.1vw,.96rem);line-height:1.8}
+.tags{display:flex;flex-wrap:wrap;justify-content:center;gap:8px;margin:22px auto 0;max-width:560px}
+.tags span{font-size:.72rem;letter-spacing:.02em;padding:6px 13px;border-radius:999px;background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.14);color:rgba(255,255,255,.78)}
+.stage{display:flex;flex-direction:column;align-items:center;gap:22px;width:100%}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:18px;width:100%}
+.card{padding:22px;min-height:150px}
+.card b{display:block;font-size:.95rem;margin-bottom:8px}
+.card p{margin:0;font-size:.8rem;line-height:1.6;color:rgba(255,255,255,.75)}
+.ip{font:600 1.25rem ui-monospace,Menlo,monospace;margin:8px 0}
+.actions{display:flex;flex-direction:column;align-items:center;gap:18px;width:100%}
+.ctrl{--r:24px;padding:20px 22px;margin:0;width:100%;max-width:460px;font-size:.85rem}
+.ctrl label{display:flex;align-items:center;gap:12px}
+.ctrl input{flex:1;accent-color:#fff}
+.btn{all:unset;cursor:pointer;display:block;margin:0;width:fit-content;--r:999px;padding:14px 34px;font-weight:700;position:relative;box-shadow:0 18px 40px rgba(0,0,0,.35)}
+.btn:focus-visible{outline:2px solid #fff;outline-offset:3px}
+#hero{position:fixed;left:50%;top:30vh;width:clamp(170px,34vw,320px);height:clamp(96px,17vw,150px);margin-left:calc(clamp(170px,34vw,320px)/-2);--r:46px;z-index:40;cursor:grab;touch-action:none;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:clamp(.9rem,2.2vw,1.05rem);text-shadow:0 1px 8px rgba(0,0,0,.35);user-select:none}
+#hero:active{cursor:grabbing}
+
+/* ===== 自定义文字玻璃块 ===== */
+.demo{width:fit-content;max-width:100%;margin:0;padding:26px 44px;--r:42px;min-width:200px;min-height:96px;
+ display:flex;align-items:center;justify-content:center;text-align:center;line-height:1.35;
+ font-size:clamp(1.2rem,4.8vw,1.7rem);font-weight:700;letter-spacing:.02em;white-space:pre-wrap;word-break:break-word}
+/* ===== 输入面板：DOM 外观整体透明化，由 Canvas 重绘，从而参与 GL 折射 ===== */
+.editor{width:100%;max-width:460px;margin:0;padding:16px 18px;display:grid;gap:12px;border-radius:22px;
+ font-size:.82rem;background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.16);
+ -webkit-backdrop-filter:blur(18px) saturate(1.5);backdrop-filter:blur(18px) saturate(1.5);
+ box-shadow:0 16px 36px rgba(0,0,0,.32),inset 0 1px 1px rgba(255,255,255,.4);
+ opacity:.001;pointer-events:auto}
+.editor .row{display:flex;align-items:center;gap:10px;min-width:0}
+.editor .row>span{flex:none;width:4.6em;color:rgba(255,255,255,.72)}
+.editor input[type=text]{flex:1;min-width:0;padding:9px 12px;border-radius:11px;font:inherit;color:#fff;
+ background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.18);outline:none;transition:background .2s,border-color .2s}
+.editor input[type=text]:focus{background:rgba(255,255,255,.2);border-color:rgba(255,255,255,.5)}
+.editor input[type=file]{flex:1;min-width:0;font:inherit;font-size:.76rem;color:rgba(255,255,255,.7)}
+.editor input[type=file]::file-selector-button{margin-right:10px;padding:7px 14px;border-radius:10px;font:inherit;font-size:.76rem;
+ color:#fff;cursor:pointer;border:1px solid rgba(255,255,255,.22);background:rgba(255,255,255,.14)}
+.editor input[type=file]::file-selector-button:hover{background:rgba(255,255,255,.24)}
+.editor button{all:unset;flex:none;cursor:pointer;padding:8px 14px;border-radius:10px;font-size:.76rem;font-weight:600;
+ color:rgba(255,255,255,.85);background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.2);
+ transition:background .2s,color .2s}
+.editor button:hover{background:rgba(255,255,255,.22);color:#fff}
+.editor button:focus-visible{outline:2px solid #fff;outline-offset:2px}
 </style>
 </head>
 <body>
+<canvas id="gl"></canvas>
+<div class="bg"><i class="blob b1"></i><i class="blob b2"></i><i class="blob b3"></i></div>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs id="defs">
+ <filter id="noise" x="0" y="0" width="100%" height="100%" color-interpolation-filters="sRGB">
+  <feTurbulence type="fractalNoise" baseFrequency="0.005 0.01" numOctaves="1" seed="17" result="t"/>
+  <feGaussianBlur in="t" stdDeviation="3" result="soft"/>
+  <feDisplacementMap in="SourceGraphic" in2="soft" scale="15" xChannelSelector="R" yChannelSelector="G"/>
+ </filter></defs></svg>
+<div class="wrap">
+ <header class="intro">
+  <h1 class="gx">液态玻璃 · Liquid Glass</h1>
+  <p class="sub gx">纯 WebGL 片元着色器实现的液态玻璃：圆角边缘折射、RGB 色散、方向性高光与多层内阴影全部逐像素实时计算，不依赖 backdrop-filter，Safari 与 Firefox 同样完整。拖动中间的玻璃，或者滚动页面，看看边缘是怎样折射背后的内容的。</p>
+  <div class="tags"><span class="gx">WebGL 着色器</span><span class="gx">实时折射</span><span class="gx">RGB 色散</span><span class="gx">可拖拽</span></div>
+ </header>
 
-<h1>Hello, Liquid Glass</h1>
+ <section class="stage">
+  <div class="g demo gx" id="demo">液态玻璃</div>
+  <div class="editor">
+   <label class="row"><span>自定义文字</span><input id="txt" type="text" value="液态玻璃" maxlength="30" placeholder="输入要测试的文字"></label>
+   <div class="row"><span>背景图片</span><input id="file" type="file" accept="image/*"><button id="clearBg" type="button">清除</button></div>
+  </div>
+ </section>
 
-<div class="liquid-glass card">这是一块液态玻璃：边缘会折射背后的内容，滚动页面或拖动小玻璃试试。</div>
-<button class="liquid-glass pill">一个按钮</button>
+ <div class="actions">
+  <div class="g ctrl gx"><label>折射强度 <input id="amt" type="range" min="0" max="160" value="90" aria-label="折射强度"><span id="amtv">90</span></label></div>
+  <button class="g btn gx" onclick="alert('按钮也是同一套玻璃')">开始检测</button>
+ </div>
 
-<!-- data-lg-top：最上层玻璃，能折射其他玻璃里的文字，文字由 DOM 自己画（可拖动） -->
-<div class="liquid-glass" id="orb" data-lg-top>拖动我</div>
+ <div class="grid">
+  <div class="g card gx"><b>IPv4地址</b><div class="ip">1.1.1.1</div><p>卡片大小不同，折射区域按各自尺寸实时计算。</p></div>
+  <div class="g card gx" style="--r:40px"><b>圆角可变</b><p>折射带沿着圆角矩形的边缘走，圆角越大，弯曲越明显。</p></div>
+  <div class="g card gx" style="--r:14px"><b>小圆角</b><p>边缘折射比纯噪声更像真实的厚玻璃。</p></div>
+  <div class="g card gx"><b>全平台 WebGL</b><p>不再依赖 backdrop-filter:url()，Safari / Firefox 也有完整折射。</p></div>
+ </div>
+</div>
 
-<script src="liquid-glass.js"></script>
+<div class="g" id="hero">拖动我</div>
+<div class="note" id="note"></div>
+
 <script>
-  const lg = LiquidGlass.init({ text: 'h1' })   // h1 在玻璃“背后”，所以要被折射
-  LiquidGlass.draggable(document.getElementById('orb'))
-  console.log('当前渲染器：', lg.renderer)        // 'webgl' 或 'css'
+const VS='attribute vec2 a;void main(){gl_Position=vec4(a,0.,1.);}';
+const FS=`precision highp float;
+uniform vec2 R;uniform float D,S;uniform int M,N;uniform vec3 e;
+uniform sampler2D B,G,P;uniform vec4 gr[12];uniform vec3 gi[12];
+uniform float bgOn;uniform vec2 bgS,bgO;
+float sdb(vec2 p,vec2 b,float r){vec2 q=abs(p)-b+r;return min(max(q.x,q.y),0.)+length(max(q,0.))-r;}
+float ph(float z){return 1./(1.+exp(-1.702*z));}
+float hs(vec2 p){return fract(sin(dot(p,vec2(127.1,311.7)))*43758.5453);}
+float vn(vec2 p){vec2 i=floor(p),f=fract(p);f=f*f*(3.-2.*f);return mix(mix(hs(i),hs(i+vec2(1.,0.)),f.x),mix(hs(i+vec2(0.,1.)),hs(i+1.),f.x),f.y);}
+vec3 sat(vec3 c,float s){return clamp(mix(vec3(dot(c,vec3(.213,.715,.072))),c,s),0.,1.);}
+float ins(vec2 q,vec2 h,float rd,vec2 o,float sp,float sg,float al){return al*ph(sdb(q-o,h-1.-sp,max(rd-1.-sp,0.))/sg);}
+/* 背景：自定义背景图 / 网格 + 三个漂浮光斑（与原 CSS 同参数） */
+vec3 bg(vec2 c){
+ vec2 W=R/D;
+ if(bgOn>.5){vec2 d=c/W-.5;return texture2D(P,(c-bgO)*bgS).rgb*(1.-.45*dot(d,d));}
+ float v=max(W.x,W.y)/100.;vec3 o=vec3(7.,7.,13.)/255.;
+ o=mix(o,vec3(1.),1.-pow(.93,step(mod(c.x,72.),2.)+step(mod(W.y-c.y,72.),2.)));
+ vec2 d=vec2(8.,6.)*v;
+ o=mix(o,vec3(94.,92.,230.)/255.,.9*(1.-ph((length(c-(vec2(11.,13.)*v+d*e.x))-23.*v*(1.+.15*e.x))/30.)));
+ o=mix(o,vec3(236.,72.,153.)/255.,.9*(1.-ph((length(c-(vec2(W.x-10.*v,.1*W.y+20.*v)+d*e.y))-20.*v*(1.+.15*e.y))/30.)));
+ o=mix(o,vec3(6.,182.,212.)/255.,.9*(1.-ph((length(c-(vec2(.25*W.x+18.*v,W.y-4.*v)+d*e.z))-18.*v*(1.+.15*e.z))/30.)));
+ return o;}
+/* 场景 = 背景 + 页面文字(B) + 其他玻璃里的文字(G) */
+vec3 sc(vec2 c,bool g){vec3 o=bg(c);vec4 t=texture2D(B,c*D/R);o=o*(1.-t.a)+t.rgb;
+ if(g){t=texture2D(G,c*D/R);o=o*(1.-t.a)+t.rgb;}return o;}
+vec3 blur(vec2 c,float s,bool g){vec3 a=vec3(0.);
+ for(int i=0;i<16;i++){float f=float(i)+.5,r=s*1.6*sqrt(f/16.),t=f*2.4;a+=sc(c+r*vec2(cos(t),sin(t)),g);}return a/16.;}
+vec3 shade(vec4 rc,vec3 inf,bool tp,vec2 c){
+ vec2 h=rc.zw*.5,q=c-rc.xy-h;float rd=min(inf.x,min(h.x,h.y)),sd=sdb(q,h,rd);
+ vec2 a=abs(q)-h+rd;
+ vec2 n=(a.x>0.||a.y>0.)?sign(q)*normalize(max(a,0.)):(a.x>a.y?vec2(sign(q.x),0.):vec2(0.,sign(q.y)));
+ vec3 col;
+ if(M==0)col=sat(blur(c,24.,tp),1.8);
+ else if(M==1){vec2 l=(c-rc.xy)*vec2(.005,.01);col=sat(blur(c+15.*(vec2(vn(l+3.),vn(l+9.))-.5),4.,tp),1.6);}
+ else{
+  float bz=max(10.,min(rd*1.1,min(rc.z,rc.w)/2.2)),u=clamp(-sd/bz,0.,1.),mg=1.-sqrt(1.-(1.-u)*(1.-u));
+  vec2 o=-n*mg*S*.498;                       /* 凸透镜剖面：边缘最强，向内取样 */
+  col=vec3(sc(c+o*1.02,tp).r,sc(c+o,tp).g,sc(c+o*.98,tp).b);   /* RGB 色散 */
+  col=min(sat(col,1.6)*1.1,1.);}
+ /* 质感层：鼠标高光 + 顶部高光 + 1px 渐变边框 + 四层内阴影（全是白色叠加） */
+ vec2 l=q+h;
+ float A=1.-(1.-.28*(1.-clamp(length(l-inf.yz)/156.,0.,1.)))*(1.-.22*(1.-clamp(length((l-vec2(h.x,0.))/(rc.zw*vec2(1.3,.7)))/.45,0.,1.)));
+ float t=smoothstep(-.05,.05,abs(n.y)-abs(n.x));
+ A=1.-(1.-A)*(1.-mix(.14,n.y<0.?.7:.04,t)*clamp((sd+1.)*D+.5,0.,1.));
+ float ip=clamp((-1.-sd)*D+.5,0.,1.);
+ A=1.-(1.-A)*(1.-ip*ins(q,h,rd,vec2(1.),0.,.5,.55))*(1.-ip*ins(q,h,rd,vec2(-1.),0.,.5,.12))
+   *(1.-ip*ins(q,h,rd,vec2(0.,10.),-8.,9.,.35))*(1.-ip*ins(q,h,rd,vec2(0.,-8.),-8.,8.,.18));
+ return mix(col,vec3(1.),A);}
+void main(){
+ vec2 c=vec2(gl_FragCoord.x,R.y-gl_FragCoord.y)/D;vec3 col=vec3(0.);bool hit=false;
+ for(int i=0;i<12;i++){
+  if(i>=N)break;
+  vec4 r=gr[i];vec2 h=r.zw*.5;float rd=min(gi[i].x,min(h.x,h.y)),sd=sdb(c-r.xy-h,h,rd);
+  if(sd<.5/D){
+   col=shade(r,gi[i],i<1,c);                       /* 拖动玻璃在最上层：能折射所有内容 */
+   if(i>=1){vec4 t=texture2D(G,c*D/R);col=col*(1.-t.a)+t.rgb;}  /* 其余玻璃自身文字清晰叠在上面 */
+   float cv=clamp(.5-sd*D,0.,1.);if(cv<1.)col=mix(sc(c,true),col,cv);
+   hit=true;break;}
+ }
+ if(!hit)col=sc(c,true);
+ gl_FragColor=vec4(col,1.);}`;
+
+const cv=document.getElementById('gl'),gl=cv.getContext('webgl',{antialias:false,alpha:false,powerPreference:'high-performance'});
+const rm=matchMedia('(prefers-reduced-motion:reduce)').matches;
+let ok=!!gl;
+function sh(t,s){const o=gl.createShader(t);gl.shaderSource(o,s);gl.compileShader(o);if(!gl.getShaderParameter(o,gl.COMPILE_STATUS)){console.error(gl.getShaderInfoLog(o));ok=false}return o}
+let pr;
+if(ok){pr=gl.createProgram();gl.attachShader(pr,sh(gl.VERTEX_SHADER,VS));gl.attachShader(pr,sh(gl.FRAGMENT_SHADER,FS));gl.linkProgram(pr);if(!gl.getProgramParameter(pr,gl.LINK_STATUS))ok=false}
+document.body.classList.add(ok?'gl':'legacy');
+const ua=navigator.userAgent,lensOK=/Chrome\/|Edg\//.test(ua)&&!/CriOS|FxiOS|EdgiOS/.test(ua);   /* backdrop-filter:url() 仅 Chromium */
+const engine=lensOK?'Chromium 内核 (Blink)':/Firefox/.test(ua)?'Gecko (Firefox)':/Safari|CriOS|FxiOS|EdgiOS/.test(ua)?'WebKit (Safari / iOS 浏览器)':'未知内核';
+
+const hero=document.getElementById('hero'),amt=document.getElementById('amt'),amtv=document.getElementById('amtv');
+let mode=2,strength=90,D=1,dirty=true;
+document.body.dataset.glass='high';   /* 只保留极客档 */
+
+amt.oninput=()=>{strength=+amt.value;amtv.textContent=strength;dirty=true;if(!ok)items.forEach(setScale)};
+
+/* 拖动玻璃 */
+let dx,dy,drag=false;
+hero.onpointerdown=e=>{drag=true;const b=hero.getBoundingClientRect();dx=e.clientX-b.left;dy=e.clientY-b.top;hero.setPointerCapture(e.pointerId)};
+hero.onpointermove=e=>{if(!drag)return;hero.style.marginLeft='0';hero.style.left=(e.clientX-dx)+'px';hero.style.top=(e.clientY-dy)+'px'};
+hero.onpointerup=hero.onpointercancel=()=>drag=false;
+
+if(ok){
+ /* 顺序很重要：导航、拖动玻璃在最前（最上层），其余按 DOM 顺序 */
+ const SEL='.ctrl,.btn,.card,#demo';
+ const gs=[hero,...document.querySelectorAll(SEL)];
+ const gr=new Float32Array(48),gi=new Float32Array(36);
+ const U=n=>gl.getUniformLocation(pr,n);
+ gl.useProgram(pr);
+ const buf=gl.createBuffer();gl.bindBuffer(gl.ARRAY_BUFFER,buf);
+ gl.bufferData(gl.ARRAY_BUFFER,new Float32Array([-1,-1,1,-1,-1,1,-1,1,1,-1,1,1]),gl.STATIC_DRAW);
+ const ap=gl.getAttribLocation(pr,'a');gl.enableVertexAttribArray(ap);gl.vertexAttribPointer(ap,2,gl.FLOAT,false,0,0);
+ gl.uniform1i(U('B'),0);gl.uniform1i(U('G'),1);gl.uniform1i(U('P'),2);
+
+ /* ===== 自定义背景图纹理（TEXTURE2，与文字层互不干扰） ===== */
+ const bgTex=gl.createTexture();
+ gl.activeTexture(gl.TEXTURE2);gl.bindTexture(gl.TEXTURE_2D,bgTex);
+ gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,1,1,0,gl.RGBA,gl.UNSIGNED_BYTE,new Uint8Array([10,10,18,255]));
+ [[gl.TEXTURE_MIN_FILTER,gl.LINEAR],[gl.TEXTURE_MAG_FILTER,gl.LINEAR],[gl.TEXTURE_WRAP_S,gl.CLAMP_TO_EDGE],[gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE]].forEach(p=>gl.texParameteri(gl.TEXTURE_2D,p[0],p[1]));
+ let bgOn=0,bgSX=1,bgSY=1,bgOX=0,bgOY=0,bgW=1,bgH=1,bgReady=false;
+ const fitBg=()=>{const W=innerWidth,H=innerHeight,s=Math.max(W/bgW,H/bgH),dw=bgW*s,dh=bgH*s;
+  bgSX=1/dw;bgSY=1/dh;bgOX=(W-dw)/2;bgOY=(H-dh)/2;};
+ window.__setBg=im=>{bgW=im.naturalWidth||im.width||1;bgH=im.naturalHeight||im.height||1;fitBg();
+  gl.activeTexture(gl.TEXTURE2);gl.bindTexture(gl.TEXTURE_2D,bgTex);
+  gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL,false);
+  gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL,false);
+  gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,gl.RGBA,gl.UNSIGNED_BYTE,im);
+  bgOn=1;bgReady=true;dirty=true;};
+ window.__clearBg=()=>{bgOn=0;dirty=true;};
+
+ const mk=()=>{const c=document.createElement('canvas');return{c,x:c.getContext('2d'),t:gl.createTexture()}};
+ const LB=mk(),LG=mk();   /* B：页面文字层；G：玻璃内文字层 */
+ [LB,LG].forEach((L,i)=>{gl.activeTexture(gl.TEXTURE0+i);gl.bindTexture(gl.TEXTURE_2D,L.t);
+  [[gl.TEXTURE_MIN_FILTER,gl.LINEAR],[gl.TEXTURE_MAG_FILTER,gl.LINEAR],[gl.TEXTURE_WRAP_S,gl.CLAMP_TO_EDGE],[gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE]].forEach(p=>gl.texParameteri(gl.TEXTURE_2D,p[0],p[1]))});
+
+ /* 圆角矩形路径 */
+ function rr(x,a,b,w,h,r){r=Math.max(0,Math.min(r,w/2,h/2));x.beginPath();x.moveTo(a+r,b);
+  x.arcTo(a+w,b,a+w,b+h,r);x.arcTo(a+w,b+h,a,b+h,r);x.arcTo(a,b+h,a,b,r);x.arcTo(a,b,a+w,b,r);x.closePath()}
+ /* 编辑器是原生控件，无法直接参与折射：整块外观由画布重绘，DOM 只留透明布局 + 交互 */
+ function paintEditor(x){
+  const el=document.querySelector('.editor');
+  if(!el||!el.offsetWidth)return;
+  const eb=el.getBoundingClientRect();
+  rr(x,eb.left,eb.top,eb.width,eb.height,parseFloat(getComputedStyle(el).borderRadius)||22);
+  x.fillStyle='rgba(255,255,255,.07)';x.fill();
+  x.lineWidth=1;x.strokeStyle='rgba(255,255,255,.16)';x.stroke();
+  el.querySelectorAll('.row').forEach(row=>{
+   row.querySelectorAll('span,input,button').forEach(nd=>{
+    const r=nd.getBoundingClientRect(),cs=getComputedStyle(nd);
+    if(r.width<1||r.height<1)return;
+    const cy=r.top+r.height/2;
+    x.font=`${cs.fontStyle} ${cs.fontWeight} ${cs.fontSize} ${cs.fontFamily}`;x.textBaseline='middle';
+    if(nd.tagName==='SPAN'){
+     x.fillStyle=cs.color;x.textAlign='left';x.fillText(nd.textContent,r.left,cy);
+    }else if(nd.tagName==='BUTTON'){
+     rr(x,r.left,r.top,r.width,r.height,parseFloat(cs.borderRadius)||10);
+     x.fillStyle='rgba(255,255,255,.12)';x.fill();
+     x.strokeStyle='rgba(255,255,255,.2)';x.lineWidth=1;x.stroke();
+     x.fillStyle=cs.color;x.textAlign='center';x.fillText(nd.textContent,r.left+r.width/2,cy);
+    }else if(nd.type==='text'){
+     rr(x,r.left,r.top,r.width,r.height,parseFloat(cs.borderRadius)||11);
+     x.fillStyle='rgba(255,255,255,.12)';x.fill();
+     x.strokeStyle='rgba(255,255,255,.18)';x.lineWidth=1;x.stroke();
+     const pad=parseFloat(cs.paddingLeft)||12;
+     x.save();rr(x,r.left+1,r.top+1,r.width-2,r.height-2,10);x.clip();
+     x.fillStyle=nd.value?'#fff':'rgba(255,255,255,.4)';x.textAlign='left';
+     x.fillText(nd.value||nd.placeholder,r.left+pad,cy);x.restore();
+    }else if(nd.type==='file'){
+     rr(x,r.left,r.top,r.width,r.height,10);
+     x.fillStyle='rgba(255,255,255,.12)';x.fill();
+     x.strokeStyle='rgba(255,255,255,.2)';x.lineWidth=1;x.stroke();
+     x.fillStyle='rgba(255,255,255,.85)';x.textAlign='center';
+     x.fillText('选择图片文件',r.left+r.width/2,cy);
+    }
+   });
+  });
+ }
+ /* 把 DOM 文字逐字按真实排版位置画进 2D 画布，再作为纹理交给 GL */
+ function paint(L,sel,slider){
+  const x=L.x;x.setTransform(1,0,0,1,0,0);x.clearRect(0,0,L.c.width,L.c.height);x.setTransform(D,0,0,D,0,0);
+  document.querySelectorAll(sel).forEach(el=>{
+   const w=document.createTreeWalker(el,NodeFilter.SHOW_TEXT),rg=document.createRange();let n;
+   while(n=w.nextNode()){
+    const s=n.textContent;if(!s.trim())continue;
+    const cs=getComputedStyle(n.parentElement);
+    x.font=`${cs.fontStyle} ${cs.fontWeight} ${cs.fontSize} ${cs.fontFamily}`;x.fillStyle=cs.color;x.textBaseline='alphabetic';
+    const asc=x.measureText('Hg').fontBoundingBoxAscent||parseFloat(cs.fontSize)*.8;
+    for(let i=0;i<s.length;i++){
+     if(/\s/.test(s[i]))continue;
+     rg.setStart(n,i);rg.setEnd(n,i+1);const b=rg.getClientRects()[0];if(b)x.fillText(s[i],b.left,b.top+asc);
+    }}});
+  if(L===LB)paintEditor(x);   /* 编辑器整块由画布绘制，才能被玻璃折射 */
+  if(slider){ /* 原生滑块不能被折射：用画布重画一个 */
+   const r=amt.getBoundingClientRect(),x0=r.left+8,x1=r.right-8,y=r.top+r.height/2,xv=x0+(x1-x0)*amt.value/amt.max;
+   x.fillStyle='rgba(255,255,255,.35)';x.fillRect(x0,y-2,x1-x0,4);x.fillStyle='#fff';x.fillRect(x0,y-2,xv-x0,4);
+   x.beginPath();x.arc(xv,y,8,0,7);x.fill();}
+  gl.activeTexture(gl.TEXTURE0+(L===LB?0:1));gl.bindTexture(gl.TEXTURE_2D,L.t);
+  gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL,true);
+  gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,gl.RGBA,gl.UNSIGNED_BYTE,L.c);
+ }
+ function resize(){D=Math.min(devicePixelRatio||1,2);
+  cv.width=LB.c.width=LG.c.width=Math.round(innerWidth*D);cv.height=LB.c.height=LG.c.height=Math.round(innerHeight*D);
+  gl.viewport(0,0,cv.width,cv.height);if(bgReady)fitBg();dirty=true}
+ addEventListener('resize',resize);addEventListener('scroll',()=>dirty=true,{passive:true});
+ document.fonts&&document.fonts.ready.then(()=>dirty=true);
+ resize();
+
+ /* 鼠标/手指跟随高光（每块玻璃各记各的） */
+ document.addEventListener('pointermove',e=>{const g=e.target.closest&&e.target.closest('.g');if(!g)return;
+  const b=g.getBoundingClientRect();g._m=[e.clientX-b.left,e.clientY-b.top]});
+
+ const bp=(t,d)=>{let x=((t+d)/22)%2;if(x>1)x=2-x;return x*x*(3-2*x)};   /* 22s 往返 ease-in-out */
+ const uR=U('R'),uD=U('D'),uS=U('S'),uM=U('M'),uN=U('N'),uE=U('e'),uGR=U('gr[0]'),uGI=U('gi[0]');
+ const uBgOn=U('bgOn'),uBgS=U('bgS'),uBgO=U('bgO');
+ function frame(ms){
+  if(dirty){paint(LB,'h1,.sub,.tags span,.note',false);paint(LG,SEL,true);dirty=false}
+  const t=ms/1000;
+  gs.forEach((el,i)=>{const b=el.getBoundingClientRect(),w=b.width,h=b.height;
+   const r=parseFloat(getComputedStyle(el).getPropertyValue('--r'))||28,m=el._m||[w*.3,0];
+   gr.set([b.left,b.top,w,h],i*4);gi.set([r,m[0],m[1]],i*3)});
+  gl.uniform2f(uR,cv.width,cv.height);gl.uniform1f(uD,D);gl.uniform1f(uS,strength);gl.uniform1i(uM,mode);
+  gl.uniform1i(uN,Math.min(gs.length,12));gl.uniform3f(uE,rm?0:bp(t,0),rm?0:bp(t,8),rm?0:bp(t,15));
+  gl.uniform4fv(uGR,gr);gl.uniform3fv(uGI,gi);
+  gl.uniform1f(uBgOn,bgOn);gl.uniform2f(uBgS,bgSX,bgSY);gl.uniform2f(uBgO,bgOX,bgOY);
+  gl.drawArrays(gl.TRIANGLES,0,6);requestAnimationFrame(frame)}
+ requestAnimationFrame(frame);
+}
+
+/* ===== 原版 CSS/SVG 折射（WebGL 不可用时） ===== */
+const items=new Map(),NS='http://www.w3.org/2000/svg',defs=document.getElementById('defs'),DISP=.02;
+function makeMap(w,h,r,bezel){
+ const c=document.createElement('canvas');c.width=w;c.height=h;
+ const x=c.getContext('2d'),img=x.createImageData(w,h),d=img.data;r=Math.min(r,w/2,h/2);
+ for(let j=0;j<h;j++)for(let i=0;i<w;i++){
+  const px=Math.abs(i+.5-w/2)-(w/2-r),py=Math.abs(j+.5-h/2)-(h/2-r);
+  const dist=Math.hypot(Math.max(px,0),Math.max(py,0))+Math.min(Math.max(px,py),0)-r;
+  const u=Math.min(1,Math.max(0,-dist/bezel)),mag=1-Math.sqrt(1-(1-u)*(1-u));
+  let nx,ny;
+  if(px>0||py>0){nx=Math.sign(i+.5-w/2)*Math.max(px,0);ny=Math.sign(j+.5-h/2)*Math.max(py,0)}
+  else if(px>py){nx=Math.sign(i+.5-w/2);ny=0}else{nx=0;ny=Math.sign(j+.5-h/2)}
+  const l=Math.hypot(nx,ny)||1,k=(j*w+i)*4;
+  d[k]=128-(nx/l)*mag*127;d[k+1]=128-(ny/l)*mag*127;d[k+2]=128;d[k+3]=255;}
+ x.putImageData(img,0,0);return c.toDataURL();}
+const ch=m=>`<feColorMatrix in="${m[0]}" type="matrix" values="${m[1]}" result="${m[2]}"/>`;
+function build(el,id){
+ const f=document.createElementNS(NS,'filter');f.id='lens-'+id;
+ ['x','y'].forEach(a=>f.setAttribute(a,'0'));['width','height'].forEach(a=>f.setAttribute(a,'100%'));
+ f.setAttribute('color-interpolation-filters','sRGB');
+ f.innerHTML=`<feImage result="map" x="0" y="0" preserveAspectRatio="none"/>
+  <feDisplacementMap in="SourceGraphic" in2="map" xChannelSelector="R" yChannelSelector="G" result="dR"/>
+  <feDisplacementMap in="SourceGraphic" in2="map" xChannelSelector="R" yChannelSelector="G" result="dG"/>
+  <feDisplacementMap in="SourceGraphic" in2="map" xChannelSelector="R" yChannelSelector="G" result="dB"/>
+  ${ch(['dR','1 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 1 0','r'])}${ch(['dG','0 0 0 0 0  0 1 0 0 0  0 0 0 0 0  0 0 0 1 0','g'])}${ch(['dB','0 0 0 0 0  0 0 0 0 0  0 0 1 0 0  0 0 0 1 0','b'])}
+  <feBlend in="r" in2="g" mode="screen" result="rg"/><feBlend in="rg" in2="b" mode="screen"/>`;
+ defs.appendChild(f);
+ items.set(el,{img:f.querySelector('feImage'),d:[...f.querySelectorAll('feDisplacementMap')]});
+ el.style.setProperty('--lens',`url(#lens-${id})`);}
+function setScale(rec){const s=strength;rec.d[0].setAttribute('scale',s*(1+DISP));rec.d[1].setAttribute('scale',s);rec.d[2].setAttribute('scale',s*(1-DISP))}
+function refresh(el){
+ const rec=items.get(el);if(!rec)return;
+ const w=Math.round(el.offsetWidth),h=Math.round(el.offsetHeight);if(!w||!h)return;
+ const r=parseFloat(getComputedStyle(el).getPropertyValue('--r'))||28,rr=Math.min(r,w/2,h/2),bezel=Math.max(10,Math.min(rr*1.1,Math.min(w,h)/2.2));
+ rec.img.setAttribute('width',w);rec.img.setAttribute('height',h);rec.img.setAttribute('href',makeMap(w,h,rr,bezel));setScale(rec);}
+if(!ok){
+ let n=0;const ro=new ResizeObserver(es=>es.forEach(e=>refresh(e.target)));
+ document.querySelectorAll('.g').forEach(el=>{build(el,n++);ro.observe(el)});
+ document.addEventListener('pointermove',e=>{const g=e.target.closest&&e.target.closest('.g');if(!g)return;
+  const b=g.getBoundingClientRect();g.style.setProperty('--mx',(e.clientX-b.left)+'px');g.style.setProperty('--my',(e.clientY-b.top)+'px')});
+}
+/* ===== 自定义文字 & 背景图 ===== */
+const txtIn=document.getElementById('txt'),fileIn=document.getElementById('file'),
+      clearBgBtn=document.getElementById('clearBg'),demoEl=document.getElementById('demo'),
+      bgLayer=document.querySelector('.bg');
+
+txtIn.addEventListener('input',()=>{demoEl.textContent=txtIn.value||' ';dirty=true});
+
+fileIn.addEventListener('change',e=>{
+ const f=e.target.files&&e.target.files[0];if(!f)return;
+ const u=URL.createObjectURL(f),im=new Image();
+ im.onload=()=>{
+  if(ok&&window.__setBg)window.__setBg(im);
+  /* 降级模式 / 非 WebGL 时用 CSS 背景图 */
+  if(bgLayer){bgLayer.style.backgroundImage=`linear-gradient(rgba(0,0,0,.28),rgba(0,0,0,.28)),url(${u})`;
+   bgLayer.style.backgroundSize='cover';bgLayer.style.backgroundPosition='center';}
+ };
+ im.onerror=()=>URL.revokeObjectURL(u);
+ im.src=u;
+});
+
+clearBgBtn.addEventListener('click',()=>{
+ if(ok&&window.__clearBg)window.__clearBg();
+ if(bgLayer){bgLayer.style.backgroundImage='';bgLayer.style.backgroundSize='';bgLayer.style.backgroundPosition='';}
+ fileIn.value='';
+});
+
+/* ===== 状态提示：内核 + WebGL ===== */
+(function(){
+ const ext=ok&&gl.getExtension('WEBGL_debug_renderer_info'),gpu=ext?gl.getParameter(ext.UNMASKED_RENDERER_WEBGL):'';
+ const why=!document.createElement('canvas').getContext('webgl')?'不支持':'着色器编译失败';
+ document.getElementById('note').textContent=ok
+  ?`内核：${engine} · WebGL：✓ 可用${gpu?'（'+gpu+'）':''} · 渲染：WebGL 着色器折射`
+  :`内核：${engine} · WebGL：✗ ${why} · 渲染：CSS/SVG 折射降级`;
+})();
 </script>
 </body>
 </html>
